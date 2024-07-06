@@ -3,6 +3,7 @@ import express, { Request, Response, NextFunction } from "express";
 import createHttpError, { HttpError } from "http-errors";
 import { config } from "./config/config";
 import GlobalErrorHandler from "./middlewares/GlobalErrorHandler";
+import userRouter from "./user/userRouter";
 const app = express();
 
 // HTTP methods - GET , POST , PUT , PATCH , DELETE
@@ -12,6 +13,8 @@ app.get('/', (req: Request, res: Response, next: NextFunction) => {
     throw error;
     res.json({ message: "Welcome to E-Lib API" });
 });
+
+app.use('/api/users',userRouter);
 
 app.use(GlobalErrorHandler)
 export default app;

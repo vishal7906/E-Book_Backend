@@ -4,6 +4,7 @@ import createHttpError, { HttpError } from "http-errors";
 import { config } from "./config/config";
 import GlobalErrorHandler from "./middlewares/GlobalErrorHandler";
 import userRouter from "./user/userRouter";
+import bookRouter from "./Book/bookRouter";
 const app = express();
 
 // HTTP methods - GET , POST , PUT , PATCH , DELETE
@@ -14,6 +15,7 @@ app.get('/', (req: Request, res: Response, next: NextFunction) => {
     res.json({ message: "Welcome to E-Lib API" });
 });
 app.use('/api/users',userRouter);
+app.use('/api/books',bookRouter)
 
 
 app.use(GlobalErrorHandler)

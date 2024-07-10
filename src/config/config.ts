@@ -7,6 +7,7 @@ const _config = {
     jwtToken:process.env.JWT_TOKEN,
     cloudname:process.env.CLOUDINARY_CLOUDNAME,
     cloudApiKey:process.env.CLOUDINARY_API_KEY,
-    cloudSecretKey:process.env.CLOUDINARY_SECRET_KEY
+    cloudSecretKey:process.env.CLOUDINARY_SECRET_KEY,
+    FrontendUrl:process.env.FRONTEND_URL
 }
 export const config = Object.freeze(_config);// object.freeze makes a property read-only

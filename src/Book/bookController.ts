@@ -94,6 +94,14 @@ const updateBook = async(req:Request,res:Response,next:NextFunction)=>{
     const files = req.files as {[fieldname:string]:Express.Multer.File[]};
     if (files.coverImage) {
         //const convertedMimeType = files.coverImage[0].mimetype.split('/').at(-1);
+        const coverFileSplit = book.coverImage.split('/');
+        const coverImagePublicId = coverFileSplit.at(-2) + "/" + coverFileSplit.at(-1)?.split('.').at(-2);
+        try {
+            await cloudinary.uploader.destroy(coverImagePublicId); // deleting previously stored coverImage from cloudinary
+           } catch (error) {
+            return next(createHttpError(500,"Error while Deleting Cover Image"))
+        }
+        
         const fileName = files.coverImage[0].filename;
         const filePath = path.resolve(__dirname,'../../public/data/uploads',fileName);
 
@@ -108,6 +116,15 @@ const updateBook = async(req:Request,res:Response,next:NextFunction)=>{
     }
     let completeFileName = "";
     if(files.file){
+        const BookFileSplit = book.file.split('/');
+        const BookFilePublicId = BookFileSplit.at(-2) + "/" + BookFileSplit.at(-1);
+        try {
+            await cloudinary.uploader.destroy(BookFilePublicId,{
+                resource_type:"raw"
+            });
+        } catch (error) {
+            return next(createHttpError(500,"Error while Deleting Cover Image"))
+        }
         const convertedMimeType = files.file[0].mimetype.split('/').at(-1);
         const bookFileName = files.file[0].filename;
         const bookFilePath = path.resolve(__dirname,'../../public/data/uploads',bookFileName);
@@ -117,7 +134,7 @@ const updateBook = async(req:Request,res:Response,next:NextFunction)=>{
         const uploadResultPdf = await cloudinary.uploader.upload(bookFilePath,{
             resource_type:"raw",
             filename_override:completeFileName,
-            folder:"book-covers"
+            folder:"book-pdfs"
         })
         completeFileName=uploadResultPdf.secure_url;
         await fs.promises.unlink(bookFilePath);
@@ -159,4 +176,37 @@ const getSingleBook = async(req:Request,res:Response,next:NextFunction)=>{
         return next(createHttpError(500,"Error while Fetching Single Book"))
     }
 }
-export {createBook,updateBook,getBook,getSingleBook};
+const deleteBook = async(req:Request,res:Response,next:NextFunction)=>{
+    const bookId = req.params.bookId;
+
+    const book = await bookModel.findOne({_id:bookId})
+    if (!book) {
+        return next(createHttpError(404,"Book Not Found"));
+    }
+    
+    const _req = req as AuthRequest;
+    if(book.author.toString()!= _req.userId){
+        return next(createHttpError(403,"Unauthorized Access"))
+    }
+    const coverFileSplit = book.coverImage.split('/');
+    const coverImagePublicId = coverFileSplit.at(-2) + "/" + coverFileSplit.at(-1)?.split('.').at(-2);
+    
+    const BookFileSplit = book.file.split('/');
+    const BookFilePublicId = BookFileSplit.at(-2) + "/" + BookFileSplit.at(-1);
+    
+   try {
+    await cloudinary.uploader.destroy(coverImagePublicId);
+   } catch (error) {
+    return next(createHttpError(500,"Error while Deleting Cover Image"))
+   }
+   try {
+    await cloudinary.uploader.destroy(BookFilePublicId,{
+        resource_type:"raw"
+    });
+   } catch (error) {
+    return next(createHttpError(500,"Error while Deleting File"))
+   }
+   await bookModel.deleteOne({_id:bookId})
+    return res.sendStatus(204);
+}
+export {createBook,updateBook,getBook,getSingleBook,deleteBook};

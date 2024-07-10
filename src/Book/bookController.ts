@@ -4,6 +4,7 @@ import path from "path";
 import createHttpError from "http-errors";
 import bookModel from "./bookModel";
 import fs from 'node:fs';
+import { AuthRequest } from "../middlewares/Authenticate";
 
 const createBook = async (req:Request,res:Response,next:NextFunction)=>{
     const {title,genre} = req.body;
@@ -35,7 +36,7 @@ const createBook = async (req:Request,res:Response,next:NextFunction)=>{
     let BookFileUploadResult;
     try {
         BookFileUploadResult = await cloudinary.uploader.upload(BookFilePath,{
-            resource_typetype:"raw",
+            resource_type:"raw",
             filename_override:BookFileName,
             folder:"book-pdfs",
             format:"pdf"
@@ -45,11 +46,13 @@ const createBook = async (req:Request,res:Response,next:NextFunction)=>{
     } 
 
     let newBook;
+    const _req = req as AuthRequest;
+
     try {
         newBook = await bookModel.create({ // adding book into database
             title,
             genre,
-            author:"668a34ecb26ac87de0272623",
+            author:_req.userId,
             coverImage:uploadResult.secure_url,
             file:BookFileUploadResult.secure_url
         })
@@ -66,10 +69,82 @@ const createBook = async (req:Request,res:Response,next:NextFunction)=>{
             console.error("Error while deleting temporary files", error);
         }
     
-        res.json({message:{id:newBook._id}})
+        res.status(201).json({message:{id:newBook._id}})
     } catch (error) {
         console.log(error);
         return next(createHttpError(500,"Error while Uploading Files"))
     }
 }
-export {createBook};
+const updateBook = async(req:Request,res:Response,next:NextFunction)=>{
+    const {title,genre} = req.body;
+    const bookId = req.params.bookId;
+
+    const book = await bookModel.findOne({_id:bookId});
+
+    if (!book) {
+        return next(createHttpError(404,"Book Not Found"));
+    }
+    const _req = req as AuthRequest;
+    
+    if(book.author.toString()!= _req.userId){
+        return next(createHttpError(403,"Unauthorized Access"))
+    }
+
+    let completeCoverImage="";
+    const files = req.files as {[fieldname:string]:Express.Multer.File[]};
+    if (files.coverImage) {
+        //const convertedMimeType = files.coverImage[0].mimetype.split('/').at(-1);
+        const fileName = files.coverImage[0].filename;
+        const filePath = path.resolve(__dirname,'../../public/data/uploads',fileName);
+
+        completeCoverImage = fileName
+
+        const uploadResult = await cloudinary.uploader.upload(filePath,{
+            filename_override:completeCoverImage,
+            folder:"book-covers",
+        })
+        completeCoverImage = uploadResult.secure_url
+        await fs.promises.unlink(filePath)
+    }
+    let completeFileName = "";
+    if(files.file){
+        const convertedMimeType = files.file[0].mimetype.split('/').at(-1);
+        const bookFileName = files.file[0].filename;
+        const bookFilePath = path.resolve(__dirname,'../../public/data/uploads',bookFileName);
+
+        completeFileName = `${bookFileName}.${convertedMimeType}`;
+
+        const uploadResultPdf = await cloudinary.uploader.upload(bookFilePath,{
+            resource_type:"raw",
+            filename_override:completeFileName,
+            folder:"book-covers"
+        })
+        completeFileName=uploadResultPdf.secure_url;
+        await fs.promises.unlink(bookFilePath);
+
+    }
+    const updateBook = await bookModel.findOneAndUpdate(
+        {
+            _id:bookId
+        },
+        {
+            title:title,
+            genre:genre,
+            coverImage:completeCoverImage?completeCoverImage:book.coverImage,
+            file:completeFileName?completeFileName:book.file
+        },
+        {new:true}
+    )
+   
+    res.json(updateBook);
+}
+const getBook = async(req:Request,res:Response,next:NextFunction)=>{
+
+    try {
+        const book = await bookModel.find();
+        return res.json(book)
+    } catch (error) {
+        return next(createHttpError(400,"Error while Fetching Books"))
+    }
+}
+export {createBook,updateBook , getBook};

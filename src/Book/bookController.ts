@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import { AuthRequest } from "../middlewares/Authenticate";
 
 const createBook = async (req:Request,res:Response,next:NextFunction)=>{
-    const {title,genre} = req.body;
+    const {title,genre,description} = req.body;
     try {
         const files = req.files as {[fieldname:string]:Express.Multer.File[]};
         if (!files || !files.coverImage || !files.file) {
@@ -51,6 +51,7 @@ const createBook = async (req:Request,res:Response,next:NextFunction)=>{
     try {
         newBook = await bookModel.create({ // adding book into database
             title,
+            description,
             genre,
             author:_req.userId,
             coverImage:uploadResult.secure_url,
@@ -158,8 +159,8 @@ const updateBook = async(req:Request,res:Response,next:NextFunction)=>{
 const getBook = async(req:Request,res:Response,next:NextFunction)=>{
 
     try {
-        const book = await bookModel.find();
-        return res.json(book)
+        const book = await bookModel.find().populate("author","name");
+        return res.status(200).json(book)
     } catch (error) {
         return next(createHttpError(400,"Error while Fetching Books"))
     }
@@ -167,7 +168,7 @@ const getBook = async(req:Request,res:Response,next:NextFunction)=>{
 const getSingleBook = async(req:Request,res:Response,next:NextFunction)=>{
     const bookId = req.params.bookId;
     try {
-        const book = await bookModel.find({_id:bookId});
+        const book = await bookModel.find({_id:bookId}).populate("author","name");
         if (!book) {
             return next(createHttpError(404,"Book Not Found"))
         }

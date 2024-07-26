@@ -78,89 +78,82 @@ const createBook = async (req:Request,res:Response,next:NextFunction)=>{
 }
 
 const updateBook = async (req: Request, res: Response, next: NextFunction) => {
-    const { title, genre } = req.body;
+    const { title, description, genre } = req.body;
     const bookId = req.params.bookId;
 
-    try {
-        const book = await bookModel.findOne({ _id: bookId });
+    const book = await bookModel.findOne({ _id: bookId });
 
-        if (!book) {
-            return next(createHttpError(404, "Book Not Found"));
-        }
+    if (!book) {
+        return next(createHttpError(404, "Book not found"));
+    }
+    // Check access
+    const _req = req as AuthRequest;
+    if (book.author.toString() !== _req.userId) {
+        return next(createHttpError(403, "You can not update others book."));
+    }
 
-        const _req = req as AuthRequest;
+    // check if image field is exists.
 
-        if (book.author.toString() != _req.userId) {
-            return next(createHttpError(403, "Unauthorized Access"));
-        }
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+    let completeCoverImage = "";
+    if (files.coverImage) {
+        const filename = files.coverImage[0].filename;
+        const converMimeType = files.coverImage[0].mimetype.split("/").at(-1);
+        // send files to cloudinary
+        const filePath = path.resolve(
+            __dirname,
+            "../../public/data/uploads/" + filename
+        );
+        completeCoverImage = filename;
+        const uploadResult = await cloudinary.uploader.upload(filePath, {
+            filename_override: completeCoverImage,
+            folder: "book-covers",
+            format: converMimeType,
+        });
 
-        let completeCoverImage = "";
-        const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+        completeCoverImage = uploadResult.secure_url;
+        await fs.promises.unlink(filePath);
+    }
 
-        if (files.coverImage) {
-            const coverFileSplit = book.coverImage.split('/');
-            const coverImagePublicId = coverFileSplit.at(-2) + "/" + coverFileSplit.at(-1)?.split('.').at(-2);
-            try {
-                await cloudinary.uploader.destroy(coverImagePublicId); // Deleting previously stored coverImage from Cloudinary
-            } catch (error) {
-                return next(createHttpError(500, "Error while Deleting Cover Image"));
-            }
-
-            const fileName = files.coverImage[0].filename;
-            const filePath = path.resolve(__dirname, '../../public/data/uploads', fileName);
-
-            completeCoverImage = fileName;
-
-            const uploadResult = await cloudinary.uploader.upload(filePath, {
-                filename_override: completeCoverImage,
-                folder: "book-covers",
-            });
-            completeCoverImage = uploadResult.secure_url;
-            await fs.promises.unlink(filePath);
-        }
-
-        let completeFileName = "";
-        if (files.file) {
-            const bookFileSplit = book.file.split('/');
-            const bookFilePublicId = bookFileSplit.at(-2) + "/" + bookFileSplit.at(-1);
-            try {
-                await cloudinary.uploader.destroy(bookFilePublicId, {
-                    resource_type: "raw"
-                });
-            } catch (error) {
-                return next(createHttpError(500, "Error while Deleting Book File"));
-            }
-
-            const convertedMimeType = files.file[0].mimetype.split('/').at(-1);
-            const bookFileName = files.file[0].filename;
-            const bookFilePath = path.resolve(__dirname, '../../public/data/uploads', bookFileName);
-
-            completeFileName = `${bookFileName}.${convertedMimeType}`;
-
-            const uploadResultPdf = await cloudinary.uploader.upload(bookFilePath, {
-                resource_type: "raw",
-                filename_override: completeFileName,
-                folder: "book-pdfs"
-            });
-            completeFileName = uploadResultPdf.secure_url;
-            await fs.promises.unlink(bookFilePath);
-        }
-
-        const updatedBook = await bookModel.findOneAndUpdate(
-            { _id: bookId },
-            {
-                title,
-                genre,
-                coverImage: completeCoverImage ? completeCoverImage : book.coverImage,
-                file: completeFileName ? completeFileName : book.file
-            },
-            { new: true }
+    // check if file field is exists.
+    let completeFileName = "";
+    if (files.file) {
+        const bookFilePath = path.resolve(
+            __dirname,
+            "../../public/data/uploads/" + files.file[0].filename
         );
 
-        res.json(updatedBook);
-    } catch (error) {
-        return next(createHttpError(500, "Failed to update book"));
+        const bookFileName = files.file[0].filename;
+        completeFileName = bookFileName;
+
+        const uploadResultPdf = await cloudinary.uploader.upload(bookFilePath, {
+            resource_type: "raw",
+            filename_override: completeFileName,
+            folder: "book-pdfs",
+            format: "pdf",
+        });
+
+        completeFileName = uploadResultPdf.secure_url;
+        await fs.promises.unlink(bookFilePath);
     }
+
+    const updatedBook = await bookModel.findOneAndUpdate(
+        {
+            _id: bookId,
+        },
+        {
+            title: title,
+            description: description,
+            genre: genre,
+            coverImage: completeCoverImage
+                ? completeCoverImage
+                : book.coverImage,
+            file: completeFileName ? completeFileName : book.file,
+        },
+        { new: true }
+    );
+
+    res.json(updatedBook);
 };
 const getBook = async(req:Request,res:Response,next:NextFunction)=>{
     //const sleep = await new Promise((resolve)=>setTimeout(resolve,3000)) checking front end Loading function

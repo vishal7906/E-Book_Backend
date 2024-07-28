@@ -78,9 +78,10 @@ const loginUser = async (req: Request, res: Response, next: NextFunction) => {
     }
 
     let token: string;
+    const userId = user._id;
     try { // generation JWT token
         token = jwt.sign({ sub: user._id }, config.jwtToken as string, { expiresIn: '7d' });
-        res.status(201).json({ accessToken: token });
+        res.status(201).json({ accessToken: token ,userId});
     } catch (error) {
         return next(createHttpError(500, "Error while creating JWT token"));
     }
